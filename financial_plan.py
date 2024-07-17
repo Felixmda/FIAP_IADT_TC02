@@ -1,34 +1,54 @@
 import random
+import logging
+import configparser
 
-# Parâmetros do problema
-Renda_Mensal = {
-    'salario_fixo': 5000,
-    'rendimentos_investimentos': 500,
-    'outras_receitas': 200
-}
-renda_total = sum(Renda_Mensal.values())
+# Configuração do logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Meta de reserva financeira
-meta_reserva = 30000
-
-# Número de meses
-num_meses = 12
-
-# Fatores de risco dos investimentos (desvio padrão)
-risco_renda_fixa = 0.01
-risco_renda_variavel = 0.05
-risco_tesouro = 0.02
-
-# Função para gerar um mês de planejamento
-def generate_month():
-    while True:
-        gastos_essenciais = random.uniform(0.3, 0.5) * renda_total
-        gastos_nao_essenciais = random.uniform(0, 0.2) * renda_total
-        reserva = renda_total - (gastos_essenciais + gastos_nao_essenciais)
-        
-        if 0.3 * renda_total <= reserva <= 0.7 * renda_total:
-            break
+def read_config(file_path):
+    config = configparser.ConfigParser()
+    config.read(file_path)
     
+    salario_fixo = config.getfloat('finance', 'salario_fixo')
+    rendimentos_investimentos = config.getfloat('finance', 'rendimentos_investimentos')
+    outras_receitas = config.getfloat('finance', 'outras_receitas')
+    meta_reserva = config.getfloat('finance', 'meta_reserva')
+    num_meses = config.getint('finance', 'num_meses')
+    min_gastos_essenciais = config.getfloat('finance', 'min_gastos_essenciais') / 100
+    max_gastos_essenciais = config.getfloat('finance', 'max_gastos_essenciais') / 100
+    min_gastos_nao_essenciais = config.getfloat('finance', 'min_gastos_nao_essenciais') / 100
+    max_gastos_nao_essenciais = config.getfloat('finance', 'max_gastos_nao_essenciais') / 100
+    max_reserva = config.getfloat('finance', 'max_reserva') / 100
+
+    if max_gastos_essenciais + max_gastos_nao_essenciais + max_reserva > 1.0:
+        raise ValueError("A soma dos percentuais dos limites não pode ultrapassar 100%")
+
+    population_size = config.getint('genetic_algorithm', 'population_size')
+    ngen = config.getint('genetic_algorithm', 'ngen')
+    mutation_rate = config.getfloat('genetic_algorithm', 'mutation_rate')
+    crossover_rate = config.getfloat('genetic_algorithm', 'crossover_rate')
+    
+    Renda_Mensal = {
+        'salario_fixo': salario_fixo,
+        'rendimentos_investimentos': rendimentos_investimentos,
+        'outras_receitas': outras_receitas
+    }
+    renda_total = sum(Renda_Mensal.values())
+    
+    return (Renda_Mensal, renda_total, meta_reserva, num_meses, 
+            min_gastos_essenciais, max_gastos_essenciais, 
+            min_gastos_nao_essenciais, max_gastos_nao_essenciais, 
+            max_reserva, population_size, ngen, mutation_rate, crossover_rate)
+
+def generate_month(renda_total, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva):
+    gastos_essenciais = random.uniform(min_gastos_essenciais, max_gastos_essenciais) * renda_total
+    gastos_nao_essenciais = random.uniform(min_gastos_nao_essenciais, max_gastos_nao_essenciais) * renda_total
+    reserva = renda_total - (gastos_essenciais + gastos_nao_essenciais)
+    
+    # Ajustar a reserva para garantir que não exceda o limite máximo
+    if reserva > max_reserva * renda_total:
+        reserva = max_reserva * renda_total
+
     # Distribuir a reserva entre os tipos de investimento
     renda_fixa = random.uniform(0, reserva)
     reserva -= renda_fixa
@@ -36,21 +56,18 @@ def generate_month():
     tesouro = reserva - renda_variavel
     return [gastos_essenciais, gastos_nao_essenciais, renda_fixa, renda_variavel, tesouro]
 
-# Função para gerar um planejamento de 12 meses
-def generate_individual():
-    return [generate_month() for _ in range(num_meses)]
+def generate_individual(num_meses, renda_total, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva):
+    return [generate_month(renda_total, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva) for _ in range(num_meses)]
 
-# Função para gerar a população inicial
-def generate_population(size):
-    return [generate_individual() for _ in range(size)]
+def generate_population(size, num_meses, renda_total, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva):
+    return [generate_individual(num_meses, renda_total, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva) for _ in range(size)]
 
-# Função de mutação
-def mutate(individual, mutation_rate=0.1):
+def mutate(individual, renda_total, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva, mutation_rate=0.1):
     for mes in individual:
         if random.random() < mutation_rate:
-            mes[0] = random.uniform(0.3, 0.5) * renda_total
+            mes[0] = random.uniform(min_gastos_essenciais, max_gastos_essenciais) * renda_total
         if random.random() < mutation_rate:
-            mes[1] = random.uniform(0, 0.2) * renda_total
+            mes[1] = random.uniform(min_gastos_nao_essenciais, max_gastos_nao_essenciais) * renda_total
         if random.random() < mutation_rate:
             reserva = renda_total - (mes[0] + mes[1])
             mes[2] = random.uniform(0, reserva)
@@ -59,26 +76,20 @@ def mutate(individual, mutation_rate=0.1):
             mes[4] = reserva - mes[3]
     return individual
 
-# Função de crossover (crossover de um ponto)
 def crossover(parent1, parent2):
     point = random.randint(1, len(parent1) - 1)
     child1 = parent1[:point] + parent2[point:]
     child2 = parent2[:point] + parent1[point:]
     return child1, child2
 
-# Função de seleção (torneio)
-def select(population, k=3):
+def select(population, eval_fn, k=3):
     selected = random.sample(population, k)
-    selected.sort(key=lambda ind: eval_plano(ind))
+    selected.sort(key=eval_fn)
     return selected[0]
 
-# Função de avaliação com logging
-def eval_plano(plano):
-    total_gastos_essenciais = 0
-    total_gastos_nao_essenciais = 0
-    total_reserva_fixa = 0
-    total_reserva_variavel = 0
-    total_reserva_tesouro = 0
+def eval_plano(plano, renda_total, risco_renda_fixa, risco_renda_variavel, risco_tesouro, meta_reserva, 
+               min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva):
+    total_reserva = 0
     
     for mes in plano:
         gastos_essenciais, gastos_nao_essenciais, renda_fixa, renda_variavel, tesouro = mes
@@ -94,30 +105,25 @@ def eval_plano(plano):
         # Calcular a reserva total
         reserva_total = renda_fixa + renda_variavel + tesouro
         
-        # Penalizar se os gastos essenciais não estiverem entre 30-50% da renda
-        if not (0.3 * renda_total <= gastos_essenciais <= 0.5 * renda_total):
+        # Penalizar se os gastos essenciais estiverem fora dos limites
+        if gastos_essenciais < min_gastos_essenciais * renda_total or gastos_essenciais > max_gastos_essenciais * renda_total:
             return float('inf')  # Penalidade alta
         
-        # Penalizar se os gastos não essenciais não estiverem entre 0-20% da renda
-        if not (0 <= gastos_nao_essenciais <= 0.2 * renda_total):
+        # Penalizar se os gastos não essenciais estiverem fora dos limites
+        if gastos_nao_essenciais < min_gastos_nao_essenciais * renda_total or gastos_nao_essenciais > max_gastos_nao_essenciais * renda_total:
             return float('inf')  # Penalidade alta
         
-        # Penalizar se a reserva não estiver entre 30-70% da renda
-        if not (0.3 * renda_total <= reserva_total <= 0.7 * renda_total):
+        # Penalizar se a reserva exceder o limite
+        if reserva_total > max_reserva * renda_total:
             return float('inf')  # Penalidade alta
         
         # Penalizar se os gastos totais excederem a renda
         if gastos_totais > renda_total:
             return float('inf')  # Penalidade alta
         
-        total_gastos_essenciais += gastos_essenciais
-        total_gastos_nao_essenciais += gastos_nao_essenciais
-        total_reserva_fixa += renda_fixa
-        total_reserva_variavel += renda_variavel
-        total_reserva_tesouro += tesouro
+        total_reserva += reserva_total
     
     # Simulação de emergências
-    total_reserva = total_reserva_fixa + total_reserva_variavel + total_reserva_tesouro
     for _ in range(random.randint(1, 3)):  # 1 a 3 emergências por ano
         emergencia = random.uniform(0.1, 0.3) * renda_total  # Emergência consome entre 10-30% da renda total
         if emergencia > total_reserva:
@@ -131,52 +137,60 @@ def eval_plano(plano):
     # Objetivo é maximizar a reserva total após emergências
     return -total_reserva
 
-# Parâmetros do algoritmo genético
-population_size = 100
-ngen = 50
-mutation_rate = 0.1
-crossover_rate = 0.5
-
-# Gerar população inicial
-population = generate_population(population_size)
-
-# Algoritmo genético
-for gen in range(ngen):
-    new_population = []
-    for _ in range(population_size // 2):
-        # Seleção
-        parent1 = select(population)
-        parent2 = select(population)
-        
-        # Crossover
-        if random.random() < crossover_rate:
-            child1, child2 = crossover(parent1, parent2)
-        else:
-            child1, child2 = parent1, parent2
-        
-        # Mutação
-        child1 = mutate(child1, mutation_rate)
-        child2 = mutate(child2, mutation_rate)
-        
-        new_population.extend([child1, child2])
+def genetic_algorithm(population_size, ngen, mutation_rate, crossover_rate, 
+                      renda_total, num_meses, risco_renda_fixa, risco_renda_variavel, risco_tesouro, meta_reserva, 
+                      min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva):
+    population = generate_population(population_size, num_meses, renda_total, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva)
+    logging.info('População inicial gerada')
     
-    # Substituir a população antiga pela nova
-    population = new_population
+    for gen in range(ngen):
+        new_population = []
+        for _ in range(population_size // 2):
+            parent1 = select(population, lambda ind: eval_plano(ind, renda_total, risco_renda_fixa, risco_renda_variavel, risco_tesouro, meta_reserva, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva))
+            parent2 = select(population, lambda ind: eval_plano(ind, renda_total, risco_renda_fixa, risco_renda_variavel, risco_tesouro, meta_reserva, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva))
+            
+            if random.random() < crossover_rate:
+                child1, child2 = crossover(parent1, parent2)
+            else:
+                child1, child2 = parent1, parent2
+            
+            child1 = mutate(child1, renda_total, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva, mutation_rate)
+            child2 = mutate(child2, renda_total, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva, mutation_rate)
+            
+            new_population.extend([child1, child2])
+        
+        population = new_population
+        # logging.info(f'Geração {gen + 1} completada')
 
-# Encontrar o melhor indivíduo
-best_ind = min(population, key=lambda ind: eval_plano(ind))
+    best_ind = min(population, key=lambda ind: eval_plano(ind, renda_total, risco_renda_fixa, risco_renda_variavel, risco_tesouro, meta_reserva, min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva))
+    logging.info('Algoritmo genético completado')
 
-# Exibir os resultados
-total_reserva = 0
-for i, mes in enumerate(best_ind, 1):
-    gastos_essenciais, gastos_nao_essenciais, renda_fixa, renda_variavel, tesouro = mes
-    total_reserva += renda_fixa + renda_variavel + tesouro
-    print(f"Mês {i}:")
-    print(f"  Gastos Essenciais: {gastos_essenciais:.2f}")
-    print(f"  Gastos Não Essenciais: {gastos_nao_essenciais:.2f}")
-    print(f"  Renda Fixa: {renda_fixa:.2f}")
-    print(f"  Renda Variável: {renda_variavel:.2f}")
-    print(f"  Tesouro: {tesouro:.2f}")
-    print(f"  Reserva Acumulada: {total_reserva:.2f}")
+    total_reserva = 0
+    for i, mes in enumerate(best_ind, 1):
+        gastos_essenciais, gastos_nao_essenciais, renda_fixa, renda_variavel, tesouro = mes
+        print(f"Mês {i}:")
+        print(f"  Gastos Essenciais: R$ {gastos_essenciais:.2f}")
+        print(f"  Gastos Não Essenciais: R$ {gastos_nao_essenciais:.2f}")
+        print(f"  Investimento em Renda Fixa: R$ {renda_fixa:.2f}")
+        print(f"  Investimento em Renda Variável: R$ {renda_variavel:.2f}")
+        print(f"  Investimento em Tesouro: R$ {tesouro:.2f}")
+        total_reserva += renda_fixa + renda_variavel + tesouro
 
-print(f"Valor Total: {-eval_plano(best_ind):.2f}")
+    print(f"\nTotal de Reserva após {num_meses} meses: R$ {total_reserva:.2f}")
+
+# Parâmetros fixos do risco
+risco_renda_fixa = 0.01
+risco_renda_variavel = 0.1
+risco_tesouro = 0.05
+
+# Obter dados do arquivo de configuração
+config_file_path = 'config.ini'
+(Renda_Mensal, renda_total, meta_reserva, num_meses, 
+ min_gastos_essenciais, max_gastos_essenciais, 
+ min_gastos_nao_essenciais, max_gastos_nao_essenciais, 
+ max_reserva, population_size, ngen, mutation_rate, crossover_rate) = read_config(config_file_path)
+
+# Executar o algoritmo genético
+genetic_algorithm(population_size, ngen, mutation_rate, crossover_rate, 
+                  renda_total, num_meses, risco_renda_fixa, risco_renda_variavel, risco_tesouro, meta_reserva, 
+                  min_gastos_essenciais, max_gastos_essenciais, min_gastos_nao_essenciais, max_gastos_nao_essenciais, max_reserva)
