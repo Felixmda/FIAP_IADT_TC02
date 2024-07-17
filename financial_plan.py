@@ -9,7 +9,7 @@ Renda_Mensal = {
 renda_total = sum(Renda_Mensal.values())
 
 # Meta de reserva financeira
-meta_reserva = 10000
+meta_reserva = 30000
 
 # Número de meses
 num_meses = 12
@@ -72,7 +72,7 @@ def select(population, k=3):
     selected.sort(key=lambda ind: eval_plano(ind))
     return selected[0]
 
-# Função de avaliação
+# Função de avaliação com logging
 def eval_plano(plano):
     total_gastos_essenciais = 0
     total_gastos_nao_essenciais = 0
@@ -107,7 +107,7 @@ def eval_plano(plano):
             return float('inf')  # Penalidade alta
         
         # Penalizar se os gastos totais excederem a renda
-        if gastos_totais + reserva_total > renda_total:
+        if gastos_totais > renda_total:
             return float('inf')  # Penalidade alta
         
         total_gastos_essenciais += gastos_essenciais
@@ -123,7 +123,7 @@ def eval_plano(plano):
         if emergencia > total_reserva:
             return float('inf')  # Penalidade alta se a reserva não for suficiente
         total_reserva -= emergencia
-    
+
     # Penalizar se a reserva total não atingir a meta
     if total_reserva < meta_reserva:
         return float('inf')  # Penalidade alta
@@ -167,12 +167,16 @@ for gen in range(ngen):
 best_ind = min(population, key=lambda ind: eval_plano(ind))
 
 # Exibir os resultados
+total_reserva = 0
 for i, mes in enumerate(best_ind, 1):
+    gastos_essenciais, gastos_nao_essenciais, renda_fixa, renda_variavel, tesouro = mes
+    total_reserva += renda_fixa + renda_variavel + tesouro
     print(f"Mês {i}:")
-    print(f"  Gastos Essenciais: {mes[0]:.2f}")
-    print(f"  Gastos Não Essenciais: {mes[1]:.2f}")
-    print(f"  Renda Fixa: {mes[2]:.2f}")
-    print(f"  Renda Variável: {mes[3]:.2f}")
-    print(f"  Tesouro: {mes[4]:.2f}")
+    print(f"  Gastos Essenciais: {gastos_essenciais:.2f}")
+    print(f"  Gastos Não Essenciais: {gastos_nao_essenciais:.2f}")
+    print(f"  Renda Fixa: {renda_fixa:.2f}")
+    print(f"  Renda Variável: {renda_variavel:.2f}")
+    print(f"  Tesouro: {tesouro:.2f}")
+    print(f"  Reserva Acumulada: {total_reserva:.2f}")
 
-print(f"Valor Total: {-eval_plano(best_ind)}")
+print(f"Valor Total: {-eval_plano(best_ind):.2f}")
